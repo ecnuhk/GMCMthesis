@@ -342,7 +342,7 @@ class Answer:
                     self.answer['answer'] = self.stack[:]
 
                     # 打印一下
-                    print('需要%d架无人机' % number, end='\t')
+                    print('需要%d架无人机，目前栈深%d' % (number, len(self.stack)), end='\t')
                     self.print_stack()
                 else:
                     # 回退
@@ -380,21 +380,39 @@ class Answer:
             return None
 
         for row in self.plan_by_Pj[Pj]:
+            # 是否已选过
             if row['choose']:
                 continue
-            else:
-                row['choose'] = True
-                row['from'] = Pj
-                # 更新选择数
-                start_Pj = row['start'][1]
-                end_Pj = row['end'][1]
-                # 更新选择数
-                self.choice[start_Pj] -= 1
-                self.choice[end_Pj] -= 1
-                # 更新已满足虚假点数
-                self.satisfy[start_Pj] += 1
-                self.satisfy[end_Pj] += 1
-                return row
+
+            # 检测是否与之前点冲突
+            conflict = False
+            start, end = row['start'], row['end']
+            for each in self.stack:
+                if each == start or each == end:
+                    conflict = True
+            if conflict:
+                continue
+
+            # 不分配航迹到已经有无人机的点上
+            if row['start'][1] == Pj and self.satisfy[row['end'][1]]>=3:  # 判断end点是否已满足
+                continue
+            if row['end'][1] == Pj and self.satisfy[row['start'][1]]>=3:  # 判断start点是否已满足
+                continue
+
+
+            row['choose'] = True
+            row['from'] = Pj
+            # 更新选择数
+            start_Pj = row['start'][1]
+            end_Pj = row['end'][1]
+            # 更新选择数
+            self.choice[start_Pj] -= 1
+            self.choice[end_Pj] -= 1
+            # 更新已满足虚假点数
+            self.satisfy[start_Pj] += 1
+            self.satisfy[end_Pj] += 1
+            return row
+
         return None
 
     def get_un_satisfy_num(self):
