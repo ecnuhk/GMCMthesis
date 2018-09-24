@@ -1,6 +1,4 @@
-a = []
-b = []
-ob = {'e':123}
-a.append(ob)
-b.append(ob)
-print(a[0] == b[0])
+line = "(1, 2, 3)"
+line = line[1:-1]
+line = line.split()
+print(line)

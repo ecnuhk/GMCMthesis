@@ -1,4 +1,5 @@
 import copy
+import sys
 
 from scipy import optimize, math
 from numpy.linalg import norm
@@ -9,7 +10,7 @@ import matplotlib.pyplot as plt
 class Answer:
     def __init__(self):
         # 高度离散化
-        self.height_span = 50
+        self.height_span = 100
         # 精度限制
         self.error = 50
         # 各个平面交点
@@ -193,9 +194,9 @@ class Answer:
 
         fig = plt.figure()
 
-        for height in range(2000, 2501, 100):
+        for height in range(2000, 2501, self.height_span):
 
-            ax = fig.add_subplot(2, 3, (height - 2000) / 100 + 1)
+            ax = fig.add_subplot(2, 3, (height - 2000) / self.height_span + 1)
             ax.set_xlabel('X Label', color='r')
             ax.set_ylabel('Y Label', color='g')
             for Ri in range(len(self.X[height])):
@@ -231,12 +232,12 @@ class Answer:
 
         plt.show()
 
-    # 输出所有航线
+    # 输出所有航线并绘制
     def get_all_plans_and_paint(self):
         self.get_points_by_all_height()
 
         plans = []
-        for height in range(2000, 2501, 100):
+        for height in range(2000, 2501, self.height_span):
 
             lines = self.get_legal_flight_by_height(height)
 
@@ -249,9 +250,9 @@ class Answer:
 
         import matplotlib.pyplot as plt
         fig = plt.figure()
-        for height in range(2000, 2501, 100):
+        for height in range(2000, 2501, self.height_span):
 
-            ax = fig.add_subplot(2, 3, (height - 2000) / 100 + 1)
+            ax = fig.add_subplot(2, 3, (height - 2000) / self.height_span + 1)
             ax.set_xlabel('X Label', color='r')
             ax.set_ylabel('Y Label', color='g')
             for Ri in range(len(self.X[height])):
@@ -283,13 +284,13 @@ class Answer:
                 R = self.X[height][Ri]
                 for Pj in range(len(R)):
                     P = R[Pj]
-                    print(Ri + 1, Pj + 1, P['x'], P['y'], P['z'])
+                    # print(Ri + 1, Pj + 1, P['x'], P['y'], P['z'])
                     # print()
 
     def get_plans(self):
         self.get_points_by_all_height()
         plans = []
-        for height in range(2000, 2501, 100):
+        for height in range(2000, 2501, self.height_span):
             lines = self.get_legal_flight_by_height(height)
             for each in lines:
                 # print(each['Hk'], each['Ri'], each['Pj'], each['para'], sep='\t', end='\t')
@@ -330,8 +331,9 @@ class Answer:
                 row = self.get_next_line()
                 need_pop = False
             else:
-                min_Pj = self.get_min_choice_Pj()  # 找到可选航迹数最少的虚假点
-                row = self.get_line_from_Pj(min_Pj)  # 取得航迹
+                Pj = self.get_Pj()  # 找到可选航迹数最少的虚假点
+                row = self.get_line_from_Pj(Pj)  # 取得航迹
+
             if row is None:
                 # 记录此状态需要无人机数量
                 number = self.get_un_satisfy_num() + len(self.stack)
@@ -347,8 +349,11 @@ class Answer:
                 else:
                     # 回退
                     need_pop = True
+                    # print('目前%d架无人机，栈深%d' % (number, len(self.stack)))
             else:
                 self.stack.append(row)
+                if self.stack.__len__() > 60:
+                    pass
         print(self.stack)
 
     def is_satisfy(self):
@@ -357,21 +362,12 @@ class Answer:
                 return False
         return True
 
-    def get_min_choice_Pj(self):
+    def get_Pj(self):
         min_Pj = None
 
-        # 找到第一个正数Pj
-        for i in range(20):
+        for i in range(19, -1, -1):
             if self.choice[i] > 0:
-                min_Pj = i
-
-        # 没有可选项了
-        if min_Pj is None:
-            return None
-
-        for i in range(20):
-            if self.choice[i] < self.choice[min_Pj]:
-                min_Pj = i
+                return i
 
         return min_Pj
 
@@ -379,7 +375,8 @@ class Answer:
         if Pj is None:
             return None
 
-        for row in self.plan_by_Pj[Pj]:
+        for i in range(len(self.plan_by_Pj[Pj]) - 1, -1, -1):
+            row = self.plan_by_Pj[Pj][i]
             # 是否已选过
             if row['choose']:
                 continue
@@ -387,19 +384,20 @@ class Answer:
             # 检测是否与之前点冲突
             conflict = False
             start, end = row['start'], row['end']
+            point1 = (start[0], start[1])
+            point2 = (end[0], end[1])
             for each in self.stack:
-                if each == start or each == end:
+                point = (each['start'][0], each['start'][1])
+                if point == point1 or point == point2:
+                    conflict = True
+                point = (each['end'][0], each['end'][1])
+                if point == point1 or point == point2:
                     conflict = True
             if conflict:
                 continue
 
-            # 不分配航迹到已经有无人机的点上
-            if row['start'][1] == Pj and self.satisfy[row['end'][1]]>=3:  # 判断end点是否已满足
-                continue
-            if row['end'][1] == Pj and self.satisfy[row['start'][1]]>=3:  # 判断start点是否已满足
-                continue
-
-
+            pass
+            # 选择该点
             row['choose'] = True
             row['from'] = Pj
             # 更新选择数
@@ -439,11 +437,31 @@ class Answer:
         pre['from'] = None
 
         find_pre = False
-        for row in self.plan_by_Pj[Pj]:
+
+        for i in range(len(self.plan_by_Pj[Pj]) - 1, -1, -1):
+            row = self.plan_by_Pj[Pj][i]
+            # for row in self.plan_by_Pj[Pj]:
             if not find_pre:
                 if row == pre:
                     find_pre = True
+                continue
             else:
+                # 检测是否与之前点冲突
+                conflict = False
+                start, end = row['start'], row['end']
+                point1 = (start[0], start[1])
+                point2 = (end[0], end[1])
+                for each in self.stack:
+                    point = (each['start'][0], each['start'][1])
+                    if point == point1 or point == point2:
+                        conflict = True
+                    point = (each['end'][0], each['end'][1])
+                    if point == point1 or point == point2:
+                        conflict = True
+                if conflict:
+                    continue
+
+                pass
                 row['choose'] = True
                 row['from'] = Pj
                 # 更新选择数
@@ -466,7 +484,143 @@ class Answer:
             print('(%d,%d,%d)->(%d,%d,%d)' % (start[0], start[1], start[2], end[0], end[1], end[2]), end='\t')
         print()
 
+    # 输出所有航线
+    def result_2(self):
+        plans = self.get_plans()
+        # plans.sort()
+
+        all = []
+        for Pj1 in range(20):
+            for Pj2 in range(Pj1 + 1, 20):
+                options = []
+                for line in plans:
+                    if line[0][1] == Pj1 and line[1][1] == Pj2:
+                        options.append(line)
+                        plans.remove(line)
+
+                length = len(options)
+                if length == 0:
+                    continue
+
+                if length == 1:
+                    # print(options[0])
+                    all.append([(options[0][0][0], Pj1, Pj2), options[0][0], options[0][1]])
+                if length > 1:
+                    # row = options[0]
+                    # min_Hk = row[0][2]
+                    # for each in options:
+                    #     if each[0][2] < min_Hk:
+                    #         min_Hk = each[0][2]
+                    #         row = each
+                    # # print(row)
+                    for each in options:
+                        all.append([(each[0][0], Pj1, Pj2), each[0], each[1]])
+        all.sort()
+        for each in all:
+            print(each)  # [(0, 15, 2), (2, 0, 2500), (2, 15, 2500)] [(Pj1,Pj2,Ri), (Ri,Pj,Hk), (Ri,Pj,Hk)]
+        while True:
+            break  # nums = [int(i) for i in sys.stdin.readline().strip().split(' ')]
+
+    # 计算题1
+    def out_1(self, p1, p2):
+        p1 = p1.strip()
+        p2 = p2.strip()
+        # p1=(2, 0, 2100)——(Ri, Pj, height)
+        p1 = p1[1:-1]
+        p1.replace(' ', '')
+        p1 = p1.split(',')
+        p1 = [int(x) for x in p1]
+        Ri1, Pi1, height1 = p1[0], p1[1], p1[2]
+
+        z = height1
+        x1 = self.R[Ri1]['x']
+        y1 = self.R[Ri1]['y']
+        z1 = self.R[Ri1]['z']
+
+        x2 = self.P[Pi1]['x']
+        y2 = self.P[Pi1]['y']
+        z2 = self.P[Pi1]['z']
+
+        x = (x2 - x1) * (z - z1) / (z2 - z1) + x1
+        y = (y2 - y1) * (z - z1) / (z2 - z1) + y1
+        P1 = (x, y, z)
+        ##########################3
+        p2 = p2[1:-1]
+        p2.replace(' ', '')
+        p2 = p2.split(',')
+        p2 = [int(x) for x in p2]
+        Ri2, Pi2, height2 = p2[0], p2[1], p2[2]
+
+        z = height2
+        x1 = self.R[Ri2]['x']
+        y1 = self.R[Ri2]['y']
+        z1 = self.R[Ri2]['z']
+
+        x2 = self.P[Pi2]['x']
+        y2 = self.P[Pi2]['y']
+        z2 = self.P[Pi2]['z']
+
+        x = (x2 - x1) * (z - z1) / (z2 - z1) + x1
+        y = (y2 - y1) * (z - z1) / (z2 - z1) + y1
+        P2 = (x, y, z)
+        ############################
+        v_x = (P2[0] - P1[0]) / ((Pi2 - Pi1) * 10)
+        v_y = (P2[1] - P1[1]) / ((Pi2 - Pi1) * 10)
+
+        # 轨迹
+        for t in range(Pi2 - Pi1 + 1):
+            x_ = P1[0] + v_x * (t * 10)
+            y_ = P2[0] + v_y * (t * 10)
+            z_ = z
+            print(round(x_, 1), round(y_, 1), round(z_, 1), sep=' ', end=' ')
+
+    # 计算题1
+    def out_2(self, Ri, Pj, Hk):
+        p = ans.X[Hk][Ri][Pj]
+        print(p['x'], p['y'], p['z'])
+
+    # 由Excel输出运动状态latex代码
+    def out_3(self):
+        self.get_points_by_all_height()
+        # print(self.X[2300][3][4])
+        # print(self.X[2300][3][10])
+        # count = 1
+        while True:
+            line = sys.stdin.readline().strip()
+            line = line.replace('\t', '').replace(' ', '')
+            line = line.split(')(')
+
+            start = line[0].strip()
+            start = start[1:]
+            start = [int(x) for x in start.split(',')]
+            Ri1, Pj1, Hk1 = start[0], start[1], start[2]
+
+            end = line[1].strip()
+            end = end[:-1]
+            end = [int(x) for x in end.split(',')]
+            Ri2, Pj2, Hk2 = end[0], end[1], end[2]
+
+            # print(Ri1, Pj1, Hk1)
+            # print(Ri2, Pj2, Hk2)
+
+            # 求始末点
+            point1 = ans.X[Hk1][Ri1][Pj1]
+            point2 = ans.X[Hk2][Ri2][Pj2]
+
+            # 计算
+            v_x = (point2['x'] - point1['x']) / (Pj2 - Pj1) / 10
+            v_y = (point2['y'] - point1['y']) / (Pj2 - Pj1) / 10
+
+            # print(str(count) + ' & ' + str(round(v_x, 2)) + ' & ' + str(round(v_y, 2)) + ' & 0 & (' + str(
+            #     round(point1['x'], 1)) + ',' + str(round(point1['y'], 1)) + ',' + str(Hk1) + '.0) & ' + str(Pj1*10) + '\\\\')
+            # count += 1
+            for t in range(Pj1, Pj2 + 1):
+                x = point1['x'] + v_x * t * 10
+                y = point2['x'] + v_y * t * 10
+                print(round(x, 1), round(y, 1), round(Hk1 * 1.0, 1), end=' ')
+            print()
+
 
 if __name__ == '__main__':
     ans = Answer()
-    ans.result()
+    ans.get_all_plans_and_paint()
